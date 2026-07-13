@@ -9,9 +9,10 @@ s3_namespace: primary-object-store
 # DNS uses s3_service_name; `kubectl get objectstore` uses
 # aistor_objectstore_name (role default).
 s3_service_name: minio
+s3_scheme: http
 s3_port: 9000
 s3_nodeport: 31001
 s3_host: "{{ s3_service_name }}.{{ s3_namespace }}.svc.cluster.local"
-s3_endpoint: "http://{{ s3_host }}:{{ s3_port }}"
-s3_endpoint_external: "http://{{ node_ip }}:{{ s3_nodeport }}"
+s3_endpoint: "{{ s3_scheme }}://{{ s3_host }}:{{ s3_port }}"
+s3_endpoint_external: "{{ s3_scheme }}://{{ node_ip }}:{{ s3_nodeport }}"
 s3_force_path_style: true

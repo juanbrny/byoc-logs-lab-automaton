@@ -5,7 +5,7 @@
 # plus a contract vars file (vars/storage_<s3_backend>.yml).
 # =====================================================================
 k8s_distro: k3s            # future: rke2, kubeadm, ...
-s3_backend: aistor         # future: seaweedfs, rook, ...
+s3_backend: aistor         # aistor | seaweedfs | external
 
 # Derived from the inventory — do NOT hardcode. The lab_node group must hold
 # exactly one host (asserted in site.yml); ansible_host is its address, with
@@ -24,8 +24,23 @@ s3_buckets:
   - byocdata
   - pgsqlbackups
 s3_region: us-east-1
-# S3 app credentials live in the vaulted group_vars/all/secrets.yml
-# (s3_access_key / s3_secret_key). Nothing secret in this file.
+# --- S3 credential flow (see README "Credential flow") ---
+# Storage roles PUBLISH the app credentials; downstream roles CONSUME them.
+# The desired keys for backends that let you choose (aistor, seaweedfs) live in
+# the vaulted secrets.yml as s3_app_access_key / s3_app_secret_key. Backends
+# that generate or are handed credentials (external, a future rook) publish
+# whatever they got. Either way the result lands here:
+s3_credentials_secret: byoc-s3-credentials
+
+# --- s3_backend: external -----------------------------------------------
+# An S3 store this playbook does NOT manage (existing MinIO, StorageGRID, ECS,
+# Rook/Ceph RGW, real AWS S3). Buckets in s3_buckets must already exist unless
+# external_s3_create_buckets is true. Credentials go in the vaulted secrets.yml.
+external_s3_scheme: https
+external_s3_host: CHANGE_ME
+external_s3_port: 443
+external_s3_force_path_style: true     # false for real AWS S3
+external_s3_namespace: byoc-s3         # ns for the mc pods + credentials Secret
 
 # --- Datadog ---
 datadog_site: datadoghq.eu

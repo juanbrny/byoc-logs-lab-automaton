@@ -18,12 +18,12 @@ cat > /tmp/policy.json << 'POLICY'
 }
 POLICY
 
-if mc admin accesskey info adm/ {{ s3_access_key }} >/dev/null 2>&1; then
+if mc admin accesskey info adm/ {{ s3_app_access_key }} >/dev/null 2>&1; then
   echo "KEY: EXISTS — leaving it"
 else
   mc admin accesskey create adm/ {{ aistor_root_user }} \
-    --access-key "{{ s3_access_key }}" \
-    --secret-key "{{ s3_secret_key }}" \
+    --access-key "{{ s3_app_access_key }}" \
+    --secret-key "{{ s3_app_secret_key }}" \
     --policy /tmp/policy.json \
     --name datadog-cloudprem-byoc
   echo "KEY: CREATED"

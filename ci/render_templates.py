@@ -20,9 +20,17 @@ BASE = dict(
     lab_node_name="ci-node",
     playbook_dir=".",
     datadog_api_key="ci", aistor_license="ci",
+    # inputs to managed backends
+    s3_app_access_key="CIACCESSKEY0000000AB",
+    s3_app_secret_key="cisecretkey000000000000000000000000000AB",
+    # published by every backend (facts at runtime)
     s3_access_key="CIACCESSKEY0000000AB",
     s3_secret_key="cisecretkey000000000000000000000000000AB",
     aistor_root_password="ci", seaweedfs_admin_secret_key="ci",
+    # external backend
+    external_s3_host="s3.example.com",
+    external_s3_access_key="CIEXTKEY00000000000A",
+    external_s3_secret_key="ciextsecret0000000000000000000000000000A",
 )
 
 
@@ -61,9 +69,18 @@ def main():
 
         print(f"\n--- backend: {backend}  ({v['s3_endpoint']})")
 
+        # every contract must publish the same required keys
+        required = ["s3_namespace", "s3_scheme", "s3_host", "s3_port",
+                    "s3_endpoint", "s3_endpoint_external", "s3_force_path_style"]
+        for key in required:
+            if key not in {**contract}:
+                failures.append(f"{backend}: contract is missing {key}")
+
         # the contract must not be silently bypassed by a hardcoded endpoint
         if f":{v['s3_port']}" not in v["s3_endpoint"]:
             failures.append(f"{backend}: s3_endpoint does not use s3_port")
+        if not v["s3_endpoint"].startswith(v["s3_scheme"] + "://"):
+            failures.append(f"{backend}: s3_endpoint does not use s3_scheme")
 
         paths = glob.glob("roles/*/templates/*.j2") + glob.glob("templates/*.j2")
         for path in sorted(paths):
@@ -81,7 +98,7 @@ def main():
                     yaml.safe_load(out)
                     kind = "YAML ok"
                 # a template that bakes in another backend's port is a bug
-                bad_port = "9000" if v["s3_port"] != 9000 else "8333"
+                bad_port = "9000" if str(v["s3_port"]) != "9000" else "8333"
                 if bad_port in out and "s3_port" not in open(path).read():
                     failures.append(f"{backend}: {path} hardcodes port {bad_port}")
                 print(f"    {path}: {kind}")

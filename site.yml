@@ -67,8 +67,8 @@
       ansible.builtin.assert:
         that:
           - datadog_api_key != "CHANGE_ME"
-          - s3_access_key != "CHANGE_ME"
-          - s3_secret_key != "CHANGE_ME"
+          - s3_app_access_key != "CHANGE_ME" or s3_backend == "external"
+          - s3_app_secret_key != "CHANGE_ME" or s3_backend == "external"
           - aistor_license != "CHANGE_ME" or s3_backend != "aistor"
           - seaweedfs_admin_secret_key != "CHANGE_ME" or s3_backend != "seaweedfs"
         fail_msg: >-
@@ -89,6 +89,13 @@
         apply:
           tags: [storage]
       tags: [storage]
+
+    - name: Resolve S3 credentials published by the storage backend
+      ansible.builtin.include_role:
+        name: s3_credentials
+        apply:
+          tags: [database, byoc, verify]
+      tags: [database, byoc, verify]
 
     - name: PostgreSQL (CloudNativePG) with WAL archiving
       ansible.builtin.include_role:

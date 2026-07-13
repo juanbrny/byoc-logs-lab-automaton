@@ -113,6 +113,29 @@ reports a little under nominal (firmware/kernel reserve) — a real 64 GB VM sho
 Override in `group_vars/all/main.yml`; bypass with `-e preflight_skip=true`.
 Run alone with `ansible-playbook site.yml -t preflight`.
 
+## Credential flow
+
+Storage backends **publish** the S3 app credentials; downstream roles
+**consume** them. The direction matters, because backends differ in who picks
+the keys:
+
+| Backend | Who chooses the credentials |
+|---|---|
+| `aistor`, `seaweedfs` | **You do.** `s3_app_access_key` / `s3_app_secret_key` from the vault are an *input*: the backend creates that key and scopes it to `s3_buckets`. |
+| `external` | **The other system does.** `external_s3_access_key` / `_secret_key` are issued elsewhere; the playbook validates and forwards them. |
+| a future `rook` | **Ceph does.** It generates them and returns them in a Secret; the role would read and publish them. |
+
+Every storage role ends by calling `s3_credentials/publish`, which sets facts
+for this run **and** writes Secret `byoc-s3-credentials` into the storage
+namespace. Downstream (`cnpg`, `byoc_logs`, `verify`) never reads
+`s3_app_*` or `external_s3_*` — only the published `s3_access_key` /
+`s3_secret_key`.
+
+That Secret is why partial runs work: `-t byoc` on an existing deployment
+resolves the credentials from it without re-running the storage role
+(`s3_credentials/main`). If neither the facts nor the Secret exist, you get a
+clear failure instead of an undefined-variable trace.
+
 ## Storage backends
 
 `s3_backend` in `group_vars/all/main.yml` selects both the role and the
@@ -121,13 +144,18 @@ contract file. Currently shipped: `aistor`, `seaweedfs`.
 The contract (`vars/storage_<backend>.yml`) is what downstream roles consume —
 they never reference a backend by name:
 
-| key | aistor | seaweedfs |
-|---|---|---|
-| `s3_namespace` | `primary-object-store` | `seaweedfs` |
-| `s3_service_name` | `minio` (operator-chosen — renamed from `myminio` in v6) | `seaweedfs-s3` (pinned via `fullnameOverride`) |
-| `s3_port` | 9000 | **8333** |
-| `s3_endpoint` | derived from host+port | derived from host+port |
-| `s3_force_path_style` | true | true |
+| key | aistor | seaweedfs | external |
+|---|---|---|---|
+| `s3_namespace` | `primary-object-store` | `seaweedfs` | `byoc-s3` (mc pods + creds Secret only) |
+| `s3_scheme` | http | http | usually **https** |
+| `s3_host` | in-cluster service FQDN | in-cluster service FQDN | whatever you point it at |
+| `s3_port` | 9000 | **8333** | 443 |
+| `s3_force_path_style` | true | true | true (false for real AWS S3) |
+
+`s3_endpoint` is always derived as `{scheme}://{host}:{port}` — CI fails any
+contract that hardcodes it instead. `s3_service_name` is **backend-internal**
+(aistor and seaweedfs use it to build the FQDN and to assert the Service
+exists); `external` has no k8s Service, so it isn't part of the contract.
 
 Both roles publish the same contract and use the same probe-first
 idempotency (verify with the app key → provision only on failure → re-probe
@@ -149,14 +177,48 @@ right place for it:
 Both roles assert the contract's Service actually exists before anything
 resolves it (`Assert the contract's S3 service exists`).
 
+### `s3_backend: external` — an unmanaged store
+
+Points the stack at an S3 store this playbook does not own: an existing MinIO,
+StorageGRID, ECS, a Rook/Ceph RGW on another cluster, or real AWS S3. Nothing is
+provisioned. The role asserts the store is fully specified, optionally creates
+buckets (`external_s3_create_buckets`, off by default — most managed stores hand
+you a key that cannot CreateBucket), then runs the **same** `mc_verify` probe
+every other backend must pass, and publishes the contract.
+
+```yaml
+# group_vars/all/main.yml
+s3_backend: external
+external_s3_scheme: https
+external_s3_host: s3.internal.example.com
+external_s3_port: 443
+external_s3_force_path_style: true    # false for real AWS S3
+```
+
+```yaml
+# vaulted secrets.yml
+external_s3_access_key: "..."
+external_s3_secret_key: "..."
+```
+
+Buckets in `s3_buckets` must already exist (or set `external_s3_create_buckets`).
+
+**Rook/Ceph** is deliberately *not* an in-repo backend. Single-node Rook needs a
+raw block device the lab VM does not have, plus a pile of non-default tunables
+(`mon.count: 1`, `failureDomain: osd`, replica size 1 with
+`requireSafeReplicaSize: false`), and it competes with the BYOC pods for RAM.
+Provision Ceph separately and consume its RGW endpoint through `external` —
+same contract, none of the coupling.
+
 ### Adding a backend (e.g. Rook)
 
-1. `roles/storage_rook/` — deploy it, gate on ready, provision buckets + a
-   key scoped to `s3_buckets`, assert the Service exists.
-2. `vars/storage_rook.yml` — publish `s3_namespace`, `s3_service_name`,
-   `s3_port`, `s3_host`, `s3_endpoint`, `s3_endpoint_external`,
-   `s3_force_path_style`.
-3. Set `s3_backend: rook`. Nothing else changes.
+1. `roles/storage_<name>/` — deploy it, gate on ready, provision buckets and a
+   key scoped to `s3_buckets`, then call `s3_credentials/publish` with whatever
+   credentials it ended up with.
+2. `vars/storage_<name>.yml` — publish the contract: `s3_namespace`,
+   `s3_scheme`, `s3_host`, `s3_port`, `s3_endpoint`, `s3_endpoint_external`,
+   `s3_force_path_style`. CI fails if a key is missing.
+3. Set `s3_backend: <name>`. Nothing else changes.
 
 ## Layout
 

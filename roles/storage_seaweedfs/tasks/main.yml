@@ -67,11 +67,13 @@
 # Same probe-first idempotency as AIStor: verify the outcome, provision only
 # when the verdict says it's missing, then re-probe as the real verdict.
 - name: Probe bucket access with the app key
+  vars:
+    mc_app_url: "{{ s3_scheme }}://{{ s3_app_access_key }}:{{ s3_app_secret_key }}@{{ s3_host }}:{{ s3_port }}"
   ansible.builtin.command:
     cmd: >
       kubectl run mc-verify --rm -i --restart=Never
       -n {{ s3_namespace }} --image=quay.io/minio/mc:latest
-      --env=MC_HOST_s3=http://{{ s3_access_key }}:{{ s3_secret_key }}@{{ s3_host }}:{{ s3_port }}
+      --env=MC_HOST_s3={{ mc_app_url }}
       --command -- sh -s
     stdin: "{{ lookup('template', playbook_dir + '/templates/mc_verify.sh.j2') }}"
   register: s3_probe
@@ -86,7 +88,8 @@
   block:
     - name: Create buckets with the admin identity
       vars:
-        adm_url: "http://{{ seaweedfs_admin_access_key }}:{{ seaweedfs_admin_secret_key }}@{{ s3_host }}:{{ s3_port }}"
+        adm_creds: "{{ seaweedfs_admin_access_key }}:{{ seaweedfs_admin_secret_key }}"
+        adm_url: "{{ s3_scheme }}://{{ adm_creds }}@{{ s3_host }}:{{ s3_port }}"
       ansible.builtin.command:
         cmd: >
           kubectl run mc-mkbucket --rm -i --restart=Never
@@ -101,16 +104,26 @@
       until: sw_buckets is succeeded
 
     - name: Re-probe bucket access (must PASS now)
+      vars:
+        mc_app_url: "{{ s3_scheme }}://{{ s3_app_access_key }}:{{ s3_app_secret_key }}@{{ s3_host }}:{{ s3_port }}"
       ansible.builtin.command:
         cmd: >
           kubectl run mc-verify --rm -i --restart=Never
           -n {{ s3_namespace }} --image=quay.io/minio/mc:latest
-          --env=MC_HOST_s3=http://{{ s3_access_key }}:{{ s3_secret_key }}@{{ s3_host }}:{{ s3_port }}
+          --env=MC_HOST_s3={{ mc_app_url }}
           --command -- sh -s
         stdin: "{{ lookup('template', playbook_dir + '/templates/mc_verify.sh.j2') }}"
       register: s3_verify
       failed_when: "'RESULT: PASS' not in s3_verify.stdout"
       changed_when: false
+
+- name: Publish the S3 credential contract
+  ansible.builtin.include_role:
+    name: s3_credentials
+    tasks_from: publish
+  vars:
+    s3_publish_access_key: "{{ s3_app_access_key }}"
+    s3_publish_secret_key: "{{ s3_app_secret_key }}"
 
 - name: Show S3 contract for downstream roles
   ansible.builtin.debug:

@@ -6,11 +6,13 @@
   changed_when: false
 
 - name: Check WAL archiving reached the bucket
+  vars:
+    mc_app_url: "{{ s3_scheme }}://{{ s3_access_key }}:{{ s3_secret_key }}@{{ s3_host }}:{{ s3_port }}"
   ansible.builtin.command:
     cmd: >
       kubectl run mc-ls-wal --rm -i --restart=Never
       -n {{ s3_namespace }} --image=quay.io/minio/mc:latest
-      --env=MC_HOST_s3=http://{{ s3_access_key }}:{{ s3_secret_key }}@{{ s3_host }}:{{ s3_port }}
+      --env=MC_HOST_s3={{ mc_app_url }}
       --command -- mc ls -r s3/{{ cnpg_backup_bucket }}/{{ cnpg_cluster_name }}/
   register: wal_ls
   changed_when: false
