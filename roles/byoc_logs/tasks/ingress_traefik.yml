@@ -1,0 +1,6 @@
+---
+# k3s ships Traefik; the chart's internal ingress assumes an AWS ALB, so we
+# disable it in values and route with an IngressRoute CRD instead.
+- name: Apply Traefik IngressRoute (replaces the chart's ALB ingress)
+  kubernetes.core.k8s:
+    template: ingressroute-traefik.yaml.j2

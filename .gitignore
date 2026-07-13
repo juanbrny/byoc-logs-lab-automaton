@@ -1,0 +1,10 @@
+# Real secrets: vaulted, but keep them out of git entirely.
+# Ship group_vars/all/secrets.yml.example instead.
+group_vars/all/secrets.yml
+.vault_pass
+
+# Fetched from the node at runtime
+.kubeconfig/
+
+*.retry
+*.tar.gz

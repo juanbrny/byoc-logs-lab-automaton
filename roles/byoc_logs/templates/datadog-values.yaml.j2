@@ -1,0 +1,57 @@
+datadog:
+  site: {{ datadog_site }}
+  apiKeyExistingSecret: datadog-secret
+
+environment:
+  AWS_REGION: {{ s3_region }}
+
+serviceAccount:
+  create: true
+  name: byoc-logs
+
+config:
+  default_index_root_uri: {{ byoc_index_root_uri }}
+  storage:
+    s3:
+      endpoint: {{ s3_endpoint }}
+      # required for MinIO/AIStor (and most S3-compatible backends)
+      force_path_style_access: {{ s3_force_path_style | lower }}
+
+metastore:
+  extraEnvFrom:
+    - secretRef:
+        name: byoc-logs-metastore-uri
+    - secretRef:
+        name: byoc-logs-minio-credentials
+
+indexer:
+  replicaCount: {{ byoc_indexer_replicas }}
+  podSize: {{ byoc_pod_size }}
+  persistentVolume:
+    enabled: true
+    storage: {{ byoc_indexer_pv_size }}
+    storageClass: {{ default_storage_class }}
+  extraEnvFrom:
+    - secretRef:
+        name: byoc-logs-minio-credentials
+
+searcher:
+  replicaCount: {{ byoc_searcher_replicas }}
+  podSize: {{ byoc_pod_size }}
+  extraEnvFrom:
+    - secretRef:
+        name: byoc-logs-minio-credentials
+
+controlPlane:
+  extraEnvFrom:
+    - secretRef:
+        name: byoc-logs-minio-credentials
+
+janitor:
+  extraEnvFrom:
+    - secretRef:
+        name: byoc-logs-minio-credentials
+
+ingress:
+  internal:
+    enabled: false

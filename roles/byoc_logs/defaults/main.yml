@@ -1,0 +1,4 @@
+---
+byoc_release_name: datadog-byoc-logs
+byoc_indexer_replicas: 1
+byoc_searcher_replicas: 1

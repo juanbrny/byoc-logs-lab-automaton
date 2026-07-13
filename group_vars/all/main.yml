@@ -1,0 +1,47 @@
+---
+# =====================================================================
+# VARIANT SELECTORS — the only two lines you touch to swap components.
+# Each maps to a role (roles/<k8s_distro>, roles/storage_<s3_backend>)
+# plus a contract vars file (vars/storage_<s3_backend>.yml).
+# =====================================================================
+k8s_distro: k3s            # future: rke2, kubeadm, ...
+s3_backend: aistor         # future: seaweedfs, rook, ...
+
+# Derived from the inventory — do NOT hardcode. The lab_node group must hold
+# exactly one host (asserted in site.yml); ansible_host is its address, with
+# the inventory name as fallback if the name itself is resolvable.
+lab_node_name: "{{ groups['lab_node'][0] }}"
+node_ip: "{{ hostvars[lab_node_name].ansible_host | default(lab_node_name) }}"
+
+# --- k8s distro contract (defaults for k3s; a different distro role ---
+# --- may need different values here)                                 ---
+kubeconfig_local_path: "{{ playbook_dir }}/.kubeconfig/{{ k8s_distro }}-byoc.yaml"
+ingress_flavor: traefik          # consumed by byoc_logs to pick ingress template
+default_storage_class: local-path
+
+# --- S3 inputs (backend-agnostic; every storage role must honor these) ---
+s3_buckets:
+  - byocdata
+  - pgsqlbackups
+s3_region: us-east-1
+# S3 app credentials live in the vaulted group_vars/all/secrets.yml
+# (s3_access_key / s3_secret_key). Nothing secret in this file.
+
+# --- Datadog ---
+datadog_site: datadoghq.eu
+cluster_name: "{{ k8s_distro }}-byoc"
+
+# --- CloudNativePG ---
+cnpg_namespace: datadogdb
+cnpg_cluster_name: datadog-postgres-cluster
+cnpg_instances: 3                # single-node lab: all 3 share one disk
+cnpg_storage_size: 1Gi
+cnpg_backup_bucket: pgsqlbackups
+cnpg_backup_schedule: "0 */6 * * *"
+
+# --- BYOC Logs (CloudPrem) ---
+byoc_namespace: byoc-logs
+byoc_data_bucket: byocdata
+byoc_index_root_uri: "s3://byocdata/indexes"
+byoc_pod_size: xlarge
+byoc_indexer_pv_size: 5Gi

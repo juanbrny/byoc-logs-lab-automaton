@@ -1,0 +1,52 @@
+# Traefik v3 IngressRoute — replaces the chart's ALB internal ingress.
+# Route intent (mirrors Datadog's internal-ingress spec):
+#   indexer   <- ingest paths (/api/v1/{index}/ingest, ES _bulk, /api/v2/logs)
+#   metastore <- /api/v1/indexes
+#   searcher  <- everything else (incl. ES _search under /api/v1/_elastic/...)
+# Higher priority wins; catch-all pinned to 1 so it always loses.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ byoc_release_name }}-cloudprem-internal
+  namespace: {{ byoc_namespace }}
+spec:
+  entryPoints:
+    - web                      # k3s Traefik HTTP entrypoint (:80). ALB was HTTP-only.
+  routes:
+    - match: PathRegexp(`^/api/v1/[^/]+/ingest$`)
+      kind: Rule
+      priority: 300
+      services:
+        - name: {{ byoc_release_name }}-cloudprem-indexer
+          port: rest
+    # doc spells it "bulk"; Quickwit actually serves "_bulk" — cover both
+    - match: PathRegexp(`^/api/v1/_elastic/_?bulk$`)
+      kind: Rule
+      priority: 300
+      services:
+        - name: {{ byoc_release_name }}-cloudprem-indexer
+          port: rest
+    - match: PathRegexp(`^/api/v1/_elastic/[^/]+/_bulk$`)
+      kind: Rule
+      priority: 300
+      services:
+        - name: {{ byoc_release_name }}-cloudprem-indexer
+          port: rest
+    - match: PathPrefix(`/api/v2/logs`)
+      kind: Rule
+      priority: 200
+      services:
+        - name: {{ byoc_release_name }}-cloudprem-indexer
+          port: rest
+    - match: PathPrefix(`/api/v1/indexes`)
+      kind: Rule
+      priority: 200
+      services:
+        - name: {{ byoc_release_name }}-cloudprem-metastore
+          port: rest
+    - match: PathPrefix(`/`)
+      kind: Rule
+      priority: 1
+      services:
+        - name: {{ byoc_release_name }}-cloudprem-searcher
+          port: rest

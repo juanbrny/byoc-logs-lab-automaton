@@ -1,0 +1,17 @@
+# Backend-agnostic bucket creation with an ADMIN/ROOT alias ("adm").
+# Key/identity provisioning is backend-specific and stays in the role.
+set -eu
+i=0
+until mc ls adm/ >/dev/null 2>&1; do
+  i=$((i+1))
+  if [ "$i" -ge 12 ]; then
+    echo "S3 endpoint unreachable after 60s" >&2
+    mc ls adm/ || true
+    exit 1
+  fi
+  sleep 5
+done
+{% for bucket in s3_buckets %}
+mc mb --ignore-existing adm/{{ bucket }}
+{% endfor %}
+echo "BUCKETS: DONE"

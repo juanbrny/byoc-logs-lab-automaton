@@ -1,0 +1,111 @@
+---
+# Full environment: node prep + k8s distro, then everything in-cluster.
+# Re-runnable end to end. Useful tag subsets:
+#   ansible-playbook site.yml -t distro
+#   ansible-playbook site.yml -t storage,database
+#   ansible-playbook site.yml -t byoc,verify
+
+- name: Provision the k8s distro on the lab node
+  hosts: lab_node
+  become: true
+  tasks:
+    - name: Preflight — VM meets the documented spec
+      ansible.builtin.include_role:
+        name: preflight
+        apply:
+          tags: [preflight]
+      tags: [preflight]
+
+    # include_role (not roles:) so the role name can come from group_vars
+    - name: Run distro role '{{ k8s_distro }}'
+      ansible.builtin.include_role:
+        name: "{{ k8s_distro }}"
+        apply:
+          tags: [distro]
+      tags: [distro]
+
+- name: Deploy the BYOC Logs prerequisite stack + BYOC Logs
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  environment:
+    KUBECONFIG: "{{ kubeconfig_local_path }}"
+    K8S_AUTH_KUBECONFIG: "{{ kubeconfig_local_path }}"
+  pre_tasks:
+    - name: Load the storage backend contract (endpoint, namespace, quirks)
+      ansible.builtin.include_vars: "vars/storage_{{ s3_backend }}.yml"
+      tags: [always]
+
+    - name: Look for the secrets file
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/group_vars/all/secrets.yml"
+      register: secrets_file
+      tags: [always]
+
+    - name: Explain how to create it if missing
+      ansible.builtin.assert:
+        that: secrets_file.stat.exists
+        fail_msg: >-
+          group_vars/all/secrets.yml does not exist. Create it from the template:
+          cp group_vars/all/secrets.yml.example group_vars/all/secrets.yml &&
+          $EDITOR group_vars/all/secrets.yml &&
+          ansible-vault encrypt group_vars/all/secrets.yml
+        quiet: true
+      tags: [always]
+
+    - name: Assert the inventory defines exactly one lab node
+      ansible.builtin.assert:
+        that:
+          - groups['lab_node'] | default([]) | length == 1
+        fail_msg: >-
+          inventory/hosts.yml must define exactly one host under lab_node —
+          node_ip is derived from it.
+      tags: [always]
+
+    - name: Refuse to run with placeholder secrets
+      ansible.builtin.assert:
+        that:
+          - datadog_api_key != "CHANGE_ME"
+          - s3_access_key != "CHANGE_ME"
+          - s3_secret_key != "CHANGE_ME"
+          - aistor_license != "CHANGE_ME" or s3_backend != "aistor"
+          - seaweedfs_admin_secret_key != "CHANGE_ME" or s3_backend != "seaweedfs"
+        fail_msg: >-
+          Placeholder values still present. Fill them in with:
+          ansible-vault edit group_vars/all/secrets.yml
+      tags: [always]
+  tasks:
+    - name: Datadog operator + agent
+      ansible.builtin.include_role:
+        name: datadog_agent
+        apply:
+          tags: [datadog]
+      tags: [datadog]
+
+    - name: S3 storage backend '{{ s3_backend }}'
+      ansible.builtin.include_role:
+        name: "storage_{{ s3_backend }}"
+        apply:
+          tags: [storage]
+      tags: [storage]
+
+    - name: PostgreSQL (CloudNativePG) with WAL archiving
+      ansible.builtin.include_role:
+        name: cnpg
+        apply:
+          tags: [database]
+      tags: [database]
+
+    - name: BYOC Logs (CloudPrem) + ingress
+      ansible.builtin.include_role:
+        name: byoc_logs
+        apply:
+          tags: [byoc]
+      tags: [byoc]
+
+    - name: End-to-end verification
+      ansible.builtin.include_role:
+        name: verify
+        apply:
+          tags: [verify]
+      tags: [verify]

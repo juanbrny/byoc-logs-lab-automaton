@@ -1,0 +1,49 @@
+---
+- name: Wait for all BYOC pods to be Ready
+  ansible.builtin.command: >
+    kubectl wait --for=condition=Ready pods --all
+    -n {{ byoc_namespace }} --timeout={{ verify_pod_timeout }}
+  changed_when: false
+
+- name: Check WAL archiving reached the bucket
+  ansible.builtin.command:
+    cmd: >
+      kubectl run mc-ls-wal --rm -i --restart=Never
+      -n {{ s3_namespace }} --image=quay.io/minio/mc:latest
+      --env=MC_HOST_s3=http://{{ s3_access_key }}:{{ s3_secret_key }}@{{ s3_service_name }}.{{ s3_namespace }}.svc.cluster.local:9000
+      --command -- mc ls -r s3/{{ cnpg_backup_bucket }}/{{ cnpg_cluster_name }}/
+  register: wal_ls
+  changed_when: false
+  failed_when: false
+
+- name: Report WAL archiving status
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'WAL archiving OK — objects present in s3://' + cnpg_backup_bucket
+         if (wal_ls.stdout | length > 0)
+         else 'No WAL objects yet — may need a few minutes after first startup' }}
+
+- name: Push a test log through the ingress
+  ansible.builtin.uri:
+    url: "http://{{ node_ip }}/api/v2/logs"
+    method: POST
+    headers:
+      Content-Type: application/json
+      DD-API-KEY: "{{ datadog_api_key }}"
+    body_format: json
+    body:
+      - message: "Hello from Ansible-provisioned BYOC Logs"
+        level: info
+        service: demo
+        ddsource: ansible
+        hostname: byocallinone
+        ddtags: "env:homelab"
+    status_code: [200, 202]
+  register: test_log
+  retries: 6              # indexer may still be warming up right after install
+  delay: 10
+  until: test_log is succeeded
+
+- name: All good
+  ansible.builtin.debug:
+    msg: "Test log accepted (HTTP {{ test_log.status }}). Environment is up."

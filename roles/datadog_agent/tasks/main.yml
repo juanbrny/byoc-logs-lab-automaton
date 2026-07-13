@@ -1,0 +1,36 @@
+---
+- name: Add Datadog helm repo
+  kubernetes.core.helm_repository:
+    name: datadog
+    repo_url: "{{ datadog_helm_repo }}"
+
+- name: Install Datadog operator
+  kubernetes.core.helm:
+    name: datadog-operator
+    chart_ref: datadog/datadog-operator
+    release_namespace: "{{ datadog_namespace }}"
+    create_namespace: true
+    update_repo_cache: true
+    wait: true            # GATE: operator ready before applying a DatadogAgent
+    wait_timeout: 180s
+
+- name: Create Datadog API key secret
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: datadog-secret
+        namespace: "{{ datadog_namespace }}"
+      type: Opaque
+      stringData:
+        api-key: "{{ datadog_api_key }}"
+
+- name: Apply DatadogAgent (cluster monitors itself)
+  kubernetes.core.k8s:
+    definition: "{{ lookup('template', 'datadog-agent.yaml.j2') | from_yaml }}"
+  # webhook can lag a few seconds behind the operator deployment
+  retries: 5
+  delay: 10
+  register: dd_agent
+  until: dd_agent is succeeded

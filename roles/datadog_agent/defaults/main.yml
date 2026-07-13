@@ -1,0 +1,4 @@
+---
+datadog_helm_repo: https://helm.datadoghq.com
+datadog_namespace: datadog
+datadog_env_tag: dev
