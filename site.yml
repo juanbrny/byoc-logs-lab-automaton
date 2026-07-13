@@ -59,7 +59,8 @@
           - groups['lab_node'] | default([]) | length == 1
         fail_msg: >-
           inventory/hosts.yml must define exactly one host under lab_node —
-          node_ip is derived from it.
+          node_ip is derived from it. If you have not created it yet:
+          cp inventory/hosts.yml.example inventory/hosts.yml
       tags: [always]
 
     - name: Refuse to run with placeholder secrets

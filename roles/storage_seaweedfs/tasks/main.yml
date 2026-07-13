@@ -85,11 +85,13 @@
   when: "'RESULT: PASS' not in s3_probe.stdout"
   block:
     - name: Create buckets with the admin identity
+      vars:
+        adm_url: "http://{{ seaweedfs_admin_access_key }}:{{ seaweedfs_admin_secret_key }}@{{ s3_host }}:{{ s3_port }}"
       ansible.builtin.command:
         cmd: >
           kubectl run mc-mkbucket --rm -i --restart=Never
           -n {{ s3_namespace }} --image=quay.io/minio/mc:latest
-          --env=MC_HOST_adm=http://{{ seaweedfs_admin_access_key }}:{{ seaweedfs_admin_secret_key }}@{{ s3_host }}:{{ s3_port }}
+          --env=MC_HOST_adm={{ adm_url }}
           --command -- sh -s
         stdin: "{{ lookup('template', playbook_dir + '/templates/mc_make_buckets.sh.j2') }}"
       register: sw_buckets

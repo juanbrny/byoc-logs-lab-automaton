@@ -2,8 +2,8 @@
 aistor_helm_repo: https://helm.min.io/
 aistor_operator_namespace: aistor
 aistor_release_name: primary-object-store
-aistor_console_nodeport: 31000   # console only; the S3 NodePort is
-                                 # s3_nodeport, in the contract file
+# console only; the S3 NodePort is s3_nodeport, in the contract file
+aistor_console_nodeport: 31000
 # The ObjectStore CR name (set by OUR helm values). Distinct from
 # s3_service_name, which the OPERATOR chooses and has renamed between
 # versions. Never use one where the other is meant.

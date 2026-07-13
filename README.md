@@ -1,5 +1,7 @@
 # BYOC Logs Lab — Ansible
 
+[![ci](https://github.com/juanbrny/byoc-logs-lab-automaton/actions/workflows/ci.yml/badge.svg)](https://github.com/juanbrny/byoc-logs-lab-automaton/actions/workflows/ci.yml)
+
 Automates the full single-node lab from the runbook: k3s, Datadog agent,
 AIStor S3 (buckets + scoped key), CloudNativePG with WAL archiving, the
 CloudPrem chart, Traefik ingress, and an end-to-end log-push verification.
@@ -16,10 +18,18 @@ CloudPrem chart, Traefik ingress, and an end-to-end log-push verification.
 
 ## First run
 
-1. Edit `inventory/hosts.yml` — the node's address lives **only** there.
-   `node_ip` is derived from it (`hostvars[...].ansible_host`), so there is
-   no second place to keep in sync. The `lab_node` group must contain exactly
-   one host; `site.yml` asserts this.
+1. Create your inventory from the template:
+
+   ```bash
+   cp inventory/hosts.yml.example inventory/hosts.yml
+   $EDITOR inventory/hosts.yml        # set ansible_host + the real hostname
+   ```
+
+   The real `hosts.yml` is gitignored. The node's address lives **only** there —
+   `node_ip` is derived from it (`hostvars[...].ansible_host`), so there is no
+   second place to keep in sync. The `lab_node` group must contain exactly one
+   host; `site.yml` asserts this. Name the inventory host after the node's real
+   hostname: a mismatch is how you end up debugging the wrong cluster.
 2. Create the secrets file from the committed template, fill it in, encrypt it:
 
    ```bash
@@ -172,3 +182,28 @@ roles/
   access with the app key, not from the AdminJob object.
 - CNPG `barmanObjectStore` is deprecated (1.26) — migrate to the Barman
   Cloud Plugin before CNPG 1.30 if this outlives a few upgrades.
+
+
+## CI
+
+`.github/workflows/ci.yml` runs on every push:
+
+- **yamllint** + **ansible-lint** (`production` profile)
+- **`ansible-playbook site.yml --syntax-check`** — catches undefined vars and
+  dynamic role names that don't resolve
+- **`ci/render_templates.py`** — renders every Jinja template against **every**
+  storage backend contract with `StrictUndefined`, asserts the output is valid
+  YAML/JSON, and fails if a template hardcodes a value the contract owns (e.g.
+  an S3 port of 9000 when the active backend listens on 8333)
+- **gitleaks** over the full history
+
+CI has no inventory or secrets (both gitignored), so it materialises throwaway
+ones from the committed `.example` files — which also proves the templates are
+complete enough for a fresh clone to run.
+
+Run the same checks locally before pushing:
+
+```bash
+yamllint . && ansible-lint && ansible-playbook site.yml --syntax-check \
+  && python3 ci/render_templates.py
+```

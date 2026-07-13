@@ -1,0 +1,17 @@
+---
+# TEMPLATE — copy to inventory/hosts.yml and set your node's address:
+#
+#   cp inventory/hosts.yml.example inventory/hosts.yml
+#
+# The real hosts.yml is gitignored. This is the SINGLE SOURCE OF TRUTH for the
+# node address: group_vars derives node_ip from it, so there is no second place
+# to keep in sync. The lab_node group must contain exactly one host.
+all:
+  children:
+    lab_node:
+      hosts:
+        # Use the node's REAL hostname as the inventory name. A mismatch here
+        # is how you end up debugging the wrong cluster.
+        byoc-lab-node:
+          ansible_host: 10.0.0.10
+          ansible_user: root

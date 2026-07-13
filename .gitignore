@@ -1,6 +1,6 @@
-# Real secrets: vaulted, but keep them out of git entirely.
-# Ship group_vars/all/secrets.yml.example instead.
+# Real secrets and environment-specific config: templates are committed instead.
 group_vars/all/secrets.yml
+inventory/hosts.yml
 .vault_pass
 
 # Fetched from the node at runtime
