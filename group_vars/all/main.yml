@@ -58,7 +58,7 @@ seaweedfs_s3_scheme: http
 # An S3 store this playbook does NOT manage (existing MinIO, StorageGRID, ECS,
 # Rook/Ceph RGW, real AWS S3). Buckets in s3_buckets must already exist unless
 # external_s3_create_buckets is true. Credentials go in the vaulted secrets.yml.
-external_s3_scheme: http
+external_s3_scheme: https
 external_s3_host: CHANGE_ME
 external_s3_port: 443
 external_s3_force_path_style: true     # false for real AWS S3
