@@ -2,7 +2,10 @@
 # `helm show values minio/aistor-objectstore` when bumping chart versions.
 objectStore:
   certificates:
-    disableAutoCert: true      # no TLS in this lab -> S3 endpoint is http://
+    # Derived from the contract's scheme so the deployment and the endpoint URL
+    # cannot disagree. https => operator issues a self-signed cert (autoCert),
+    # which also needs s3_tls_skip_verify: true for mc to accept it.
+    disableAutoCert: {{ 'true' if s3_scheme == 'http' else 'false' }}
   pools:
     # REQUIRED: spec.pools is a server-side-apply map-list keyed by "name".
     # Omitting it fails the typed patch with "omits all key fields [name]".

@@ -156,6 +156,27 @@ contract that hardcodes it instead. `s3_service_name` is **backend-internal**
 (aistor and seaweedfs use it to build the FQDN and to assert the Service
 exists); `external` has no k8s Service, so it isn't part of the contract.
 
+### Inputs vs contract
+
+Every backend takes its own `<backend>_s3_*` **inputs** from
+`group_vars/all/main.yml` and maps them onto the neutral `s3_*` **contract**
+keys in `vars/storage_<backend>.yml`. Same shape for all three, so the knob you
+reach for doesn't depend on which backend is active:
+
+```yaml
+aistor_s3_scheme: http      # -> s3_scheme
+seaweedfs_s3_scheme: http   # -> s3_scheme
+external_s3_scheme: http    # -> s3_scheme
+```
+
+The scheme is not cosmetic — it drives the deployment. `aistor_s3_scheme:
+https` sets `disableAutoCert: false`, so the operator issues a self-signed cert;
+pair it with `s3_tls_skip_verify: true` so `mc` (which every probe runs) gets
+`--insecure`. SeaweedFS **asserts** the scheme is `http`: the chart can do TLS
+but this repo doesn't wire the certs, and advertising https over a plaintext
+gateway is worse than refusing. CI fails any contract that hardcodes a scheme
+instead of deriving it from its input.
+
 Both roles publish the same contract and use the same probe-first
 idempotency (verify with the app key → provision only on failure → re-probe
 as the verdict) and the same shared `templates/mc_verify.sh.j2`.

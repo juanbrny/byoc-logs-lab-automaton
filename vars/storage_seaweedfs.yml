@@ -7,7 +7,7 @@ s3_namespace: seaweedfs
 # fullnameOverride to "seaweedfs", so this is deterministic across chart
 # versions instead of being derived from the release name.
 s3_service_name: seaweedfs-s3
-s3_scheme: http
+s3_scheme: "{{ seaweedfs_s3_scheme }}"
 s3_port: 8333                    # SeaweedFS S3 gateway (NOT 9000)
 s3_nodeport: 31101
 s3_host: "{{ s3_service_name }}.{{ s3_namespace }}.svc.cluster.local"

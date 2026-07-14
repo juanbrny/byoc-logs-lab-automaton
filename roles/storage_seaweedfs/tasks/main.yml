@@ -1,4 +1,15 @@
 ---
+# The chart can do TLS, but this repo does not wire the certs. Fail loudly
+# instead of advertising https while the gateway serves plaintext.
+- name: Assert the scheme matches what this role actually deploys
+  ansible.builtin.assert:
+    that: s3_scheme == "http"
+    fail_msg: >-
+      seaweedfs_s3_scheme=https is not implemented — the chart's TLS wiring is
+      not in this repo. Use http, or point s3_backend at 'external' with a
+      TLS-terminated SeaweedFS you manage yourself.
+    quiet: true
+
 - name: Add SeaweedFS helm repo
   kubernetes.core.helm_repository:
     name: seaweedfs

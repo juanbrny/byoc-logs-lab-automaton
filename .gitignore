@@ -7,4 +7,5 @@ inventory/hosts.yml
 .kubeconfig/
 
 *.retry
+*.patch
 *.tar.gz

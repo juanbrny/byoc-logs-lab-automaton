@@ -27,8 +27,11 @@ BASE = dict(
     s3_access_key="CIACCESSKEY0000000AB",
     s3_secret_key="cisecretkey000000000000000000000000000AB",
     aistor_root_password="ci", seaweedfs_admin_secret_key="ci",
+    s3_tls_skip_verify=False, mc_opts="",
+    aistor_s3_scheme="http", seaweedfs_s3_scheme="http", external_s3_scheme="https",
     # external backend
-    external_s3_host="s3.example.com",
+    external_s3_host="s3.example.com", external_s3_port=443,
+    external_s3_force_path_style=True, external_s3_namespace="byoc-s3",
     external_s3_access_key="CIEXTKEY00000000000A",
     external_s3_secret_key="ciextsecret0000000000000000000000000000A",
 )
@@ -81,6 +84,13 @@ def main():
             failures.append(f"{backend}: s3_endpoint does not use s3_port")
         if not v["s3_endpoint"].startswith(v["s3_scheme"] + "://"):
             failures.append(f"{backend}: s3_endpoint does not use s3_scheme")
+
+        # the scheme must be an input, not a literal baked into the contract
+        raw = open(f"vars/storage_{backend}.yml").read()
+        if "s3_scheme: http" in raw:
+            failures.append(
+                f"{backend}: contract hardcodes s3_scheme — derive it from "
+                f"{backend}_s3_scheme so the knob exists for every backend")
 
         paths = glob.glob("roles/*/templates/*.j2") + glob.glob("templates/*.j2")
         for path in sorted(paths):

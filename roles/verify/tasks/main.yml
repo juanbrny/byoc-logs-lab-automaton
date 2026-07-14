@@ -13,7 +13,7 @@
       kubectl run mc-ls-wal --rm -i --restart=Never
       -n {{ s3_namespace }} --image=quay.io/minio/mc:latest
       --env=MC_HOST_s3={{ mc_app_url }}
-      --command -- mc ls -r s3/{{ cnpg_backup_bucket }}/{{ cnpg_cluster_name }}/
+      --command -- mc {{ mc_opts }} ls -r s3/{{ cnpg_backup_bucket }}/{{ cnpg_cluster_name }}/
   register: wal_ls
   changed_when: false
   failed_when: false
