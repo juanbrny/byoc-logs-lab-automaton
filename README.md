@@ -2,19 +2,18 @@
 
 [![ci](https://github.com/juanbrny/byoc-logs-lab-automaton/actions/workflows/ci.yml/badge.svg)](https://github.com/juanbrny/byoc-logs-lab-automaton/actions/workflows/ci.yml)
 
-Automates the full single-node lab from the runbook: k3s, Datadog agent,
-AIStor S3 (buckets + scoped key), CloudNativePG with WAL archiving, the
+Automates the full single-node lab from the runbook: k3s, Datadog agent, S3 storage (either internal within lab server or external), PostgreSQL metadata store using CloudNativePG with WAL archiving, the
 CloudPrem chart, Traefik ingress, and an end-to-end log-push verification.
 
-> **Lab only.** Single node, local storage, no TLS, default root creds on
-> the object store. Nothing here is production posture.
+> **Lab only.** Single node, local storage with no TLS, default root creds on
+> the object store. Nothing here resembles production, just local testing.
 
 ## Prerequisites (workstation / control node)
 
 - `ansible-core` >= 2.15, `kubectl`, `helm`
 - `pip install kubernetes`
 - `ansible-galaxy collection install -r requirements.yml`
-- SSH root access to the lab VM
+- SSH root access to the lab VM (AWS SSM support will come next)
 
 ## First run
 

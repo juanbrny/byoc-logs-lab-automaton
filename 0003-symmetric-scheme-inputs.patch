@@ -1,0 +1,277 @@
+From aa0a46f64aa59bfb7ef71dafa90d52ad0efc1abe Mon Sep 17 00:00:00 2001
+From: dev <dev@local>
+Date: Tue, 14 Jul 2026 08:41:24 +0000
+Subject: [PATCH] Symmetric per-backend scheme inputs; scheme drives TLS config
+
+Every backend now takes <backend>_s3_scheme as an input and maps it onto the
+neutral s3_scheme contract key, so the knob exists for all three rather than
+only for external.
+
+The scheme is no longer cosmetic: aistor derives disableAutoCert from it (they
+cannot drift), mc gains --insecure via s3_tls_skip_verify for self-signed
+certs, and seaweedfs asserts http because its TLS wiring is not implemented
+here. CI fails any contract that hardcodes a scheme.
+---
+ README.md                                     | 21 ++++++++++++++++
+ ci/render_templates.py                        | 12 +++++++++-
+ group_vars/all/main.yml                       | 24 ++++++++++++++++++-
+ .../templates/mc_accesskey.sh.j2              |  4 ++--
+ .../templates/objectstore-values.yaml.j2      |  5 +++-
+ roles/storage_seaweedfs/tasks/main.yml        | 11 +++++++++
+ roles/verify/tasks/main.yml                   |  2 +-
+ templates/mc_make_buckets.sh.j2               |  6 ++---
+ templates/mc_verify.sh.j2                     | 10 ++++----
+ vars/storage_aistor.yml                       |  2 +-
+ vars/storage_seaweedfs.yml                    |  2 +-
+ 11 files changed, 83 insertions(+), 16 deletions(-)
+
+diff --git a/README.md b/README.md
+index aba6345..31ea434 100644
+--- a/README.md
++++ b/README.md
+@@ -157,6 +157,27 @@ contract that hardcodes it instead. `s3_service_name` is **backend-internal**
+ (aistor and seaweedfs use it to build the FQDN and to assert the Service
+ exists); `external` has no k8s Service, so it isn't part of the contract.
+ 
++### Inputs vs contract
++
++Every backend takes its own `<backend>_s3_*` **inputs** from
++`group_vars/all/main.yml` and maps them onto the neutral `s3_*` **contract**
++keys in `vars/storage_<backend>.yml`. Same shape for all three, so the knob
++you reach for doesn't depend on which backend is active:
++
++```yaml
++aistor_s3_scheme: http      # -> s3_scheme
++seaweedfs_s3_scheme: http   # -> s3_scheme
++external_s3_scheme: https   # -> s3_scheme
++```
++
++The scheme is not cosmetic — it drives the deployment. `aistor_s3_scheme:
++https` sets `disableAutoCert: false`, so the operator issues a self-signed
++cert; pair it with `s3_tls_skip_verify: true` so `mc` (which every probe runs)
++gets `--insecure`. SeaweedFS **asserts** the scheme is `http`: the chart can do
++TLS but this repo doesn't wire the certs, and advertising https over a
++plaintext gateway is worse than refusing. CI fails any contract that hardcodes
++a scheme instead of deriving it from its input.
++
+ Both roles publish the same contract and use the same probe-first
+ idempotency (verify with the app key → provision only on failure → re-probe
+ as the verdict) and the same shared `templates/mc_verify.sh.j2`.
+diff --git a/ci/render_templates.py b/ci/render_templates.py
+index 913f94f..6bf02aa 100755
+--- a/ci/render_templates.py
++++ b/ci/render_templates.py
+@@ -27,8 +27,11 @@ BASE = dict(
+     s3_access_key="CIACCESSKEY0000000AB",
+     s3_secret_key="cisecretkey000000000000000000000000000AB",
+     aistor_root_password="ci", seaweedfs_admin_secret_key="ci",
++    s3_tls_skip_verify=False,
++    aistor_s3_scheme="http", seaweedfs_s3_scheme="http", external_s3_scheme="https",
+     # external backend
+-    external_s3_host="s3.example.com",
++    external_s3_host="s3.example.com", external_s3_port=443,
++    external_s3_force_path_style=True, external_s3_namespace="byoc-s3",
+     external_s3_access_key="CIEXTKEY00000000000A",
+     external_s3_secret_key="ciextsecret0000000000000000000000000000A",
+ )
+@@ -82,6 +85,13 @@ def main():
+         if not v["s3_endpoint"].startswith(v["s3_scheme"] + "://"):
+             failures.append(f"{backend}: s3_endpoint does not use s3_scheme")
+ 
++        # the scheme must be an input, not a literal baked into the contract
++        raw = open(f"vars/storage_{backend}.yml").read()
++        if "s3_scheme: http" in raw:
++            failures.append(
++                f"{backend}: contract hardcodes s3_scheme — derive it from "
++                f"{backend}_s3_scheme so the knob exists for every backend")
++
+         paths = glob.glob("roles/*/templates/*.j2") + glob.glob("templates/*.j2")
+         for path in sorted(paths):
+             # a role's templates only render under its own backend
+diff --git a/group_vars/all/main.yml b/group_vars/all/main.yml
+index 31dce8b..115f2e7 100644
+--- a/group_vars/all/main.yml
++++ b/group_vars/all/main.yml
+@@ -32,7 +32,29 @@ s3_region: us-east-1
+ # whatever they got. Either way the result lands here:
+ s3_credentials_secret: byoc-s3-credentials
+ 
+-# --- s3_backend: external -----------------------------------------------
++# Skip TLS verification on S3 (adds `mc --insecure`). Needed for self-signed
++# certs; ignored when the scheme is http.
++s3_tls_skip_verify: false
++# Appended to every `mc` call. Empty unless we're on https with a cert mc
++# wouldn't trust anyway.
++mc_opts: "{{ '--insecure' if (s3_scheme == 'https' and s3_tls_skip_verify | bool) else '' }}"
++
++# --- Per-backend INPUTS -------------------------------------------------
++# Each backend takes its own <backend>_s3_* inputs and maps them onto the
++# neutral contract keys in vars/storage_<backend>.yml. Only the block for the
++# active s3_backend is used.
++
++# backend: aistor
++# http|https. https makes the operator issue a self-signed cert (autoCert),
++# so it needs s3_tls_skip_verify: true as well.
++aistor_s3_scheme: http
++
++# backend: seaweedfs
++# http only for now — the chart's TLS wiring is not implemented in this repo.
++# The role asserts this rather than silently serving plaintext on an https URL.
++seaweedfs_s3_scheme: http
++
++# backend: external
+ # An S3 store this playbook does NOT manage (existing MinIO, StorageGRID, ECS,
+ # Rook/Ceph RGW, real AWS S3). Buckets in s3_buckets must already exist unless
+ # external_s3_create_buckets is true. Credentials go in the vaulted secrets.yml.
+diff --git a/roles/storage_aistor/templates/mc_accesskey.sh.j2 b/roles/storage_aistor/templates/mc_accesskey.sh.j2
+index da76a21..c317c67 100644
+--- a/roles/storage_aistor/templates/mc_accesskey.sh.j2
++++ b/roles/storage_aistor/templates/mc_accesskey.sh.j2
+@@ -18,10 +18,10 @@ cat > /tmp/policy.json << 'POLICY'
+ }
+ POLICY
+ 
+-if mc admin accesskey info adm/ {{ s3_app_access_key }} >/dev/null 2>&1; then
++if mc {{ mc_opts }} admin accesskey info adm/ {{ s3_app_access_key }} >/dev/null 2>&1; then
+   echo "KEY: EXISTS — leaving it"
+ else
+-  mc admin accesskey create adm/ {{ aistor_root_user }} \
++  mc {{ mc_opts }} admin accesskey create adm/ {{ aistor_root_user }} \
+     --access-key "{{ s3_app_access_key }}" \
+     --secret-key "{{ s3_app_secret_key }}" \
+     --policy /tmp/policy.json \
+diff --git a/roles/storage_aistor/templates/objectstore-values.yaml.j2 b/roles/storage_aistor/templates/objectstore-values.yaml.j2
+index b0a4bae..20aa9f7 100644
+--- a/roles/storage_aistor/templates/objectstore-values.yaml.j2
++++ b/roles/storage_aistor/templates/objectstore-values.yaml.j2
+@@ -2,7 +2,10 @@
+ # `helm show values minio/aistor-objectstore` when bumping chart versions.
+ objectStore:
+   certificates:
+-    disableAutoCert: true      # no TLS in this lab -> S3 endpoint is http://
++    # Derived from the contract's scheme so the deployment and the endpoint URL
++    # cannot disagree. https => operator issues a self-signed cert (autoCert),
++    # which also needs s3_tls_skip_verify: true for mc to accept it.
++    disableAutoCert: {{ 'true' if s3_scheme == 'http' else 'false' }}
+   pools:
+     # REQUIRED: spec.pools is a server-side-apply map-list keyed by "name".
+     # Omitting it fails the typed patch with "omits all key fields [name]".
+diff --git a/roles/storage_seaweedfs/tasks/main.yml b/roles/storage_seaweedfs/tasks/main.yml
+index c160e9c..749a110 100644
+--- a/roles/storage_seaweedfs/tasks/main.yml
++++ b/roles/storage_seaweedfs/tasks/main.yml
+@@ -1,4 +1,15 @@
+ ---
++# The chart can do TLS, but this repo does not wire the certs. Fail loudly
++# instead of advertising https while the gateway serves plaintext.
++- name: Assert the scheme matches what this role actually deploys
++  ansible.builtin.assert:
++    that: s3_scheme == "http"
++    fail_msg: >-
++      seaweedfs_s3_scheme=https is not implemented — the chart's TLS wiring is
++      not in this repo. Use http, or point s3_backend at 'external' with a
++      TLS-terminated SeaweedFS you manage yourself.
++    quiet: true
++
+ - name: Add SeaweedFS helm repo
+   kubernetes.core.helm_repository:
+     name: seaweedfs
+diff --git a/roles/verify/tasks/main.yml b/roles/verify/tasks/main.yml
+index 2d468df..28d22f9 100644
+--- a/roles/verify/tasks/main.yml
++++ b/roles/verify/tasks/main.yml
+@@ -13,7 +13,7 @@
+       kubectl run mc-ls-wal --rm -i --restart=Never
+       -n {{ s3_namespace }} --image=quay.io/minio/mc:latest
+       --env=MC_HOST_s3={{ mc_app_url }}
+-      --command -- mc ls -r s3/{{ cnpg_backup_bucket }}/{{ cnpg_cluster_name }}/
++      --command -- mc {{ mc_opts }} ls -r s3/{{ cnpg_backup_bucket }}/{{ cnpg_cluster_name }}/
+   register: wal_ls
+   changed_when: false
+   failed_when: false
+diff --git a/templates/mc_make_buckets.sh.j2 b/templates/mc_make_buckets.sh.j2
+index 0dee4b8..e5625e6 100644
+--- a/templates/mc_make_buckets.sh.j2
++++ b/templates/mc_make_buckets.sh.j2
+@@ -2,16 +2,16 @@
+ # Key/identity provisioning is backend-specific and stays in the role.
+ set -eu
+ i=0
+-until mc ls adm/ >/dev/null 2>&1; do
++until mc {{ mc_opts }} ls adm/ >/dev/null 2>&1; do
+   i=$((i+1))
+   if [ "$i" -ge 12 ]; then
+     echo "S3 endpoint unreachable after 60s" >&2
+-    mc ls adm/ || true
++    mc {{ mc_opts }} ls adm/ || true
+     exit 1
+   fi
+   sleep 5
+ done
+ {% for bucket in s3_buckets %}
+-mc mb --ignore-existing adm/{{ bucket }}
++mc {{ mc_opts }} mb --ignore-existing adm/{{ bucket }}
+ {% endfor %}
+ echo "BUCKETS: DONE"
+diff --git a/templates/mc_verify.sh.j2 b/templates/mc_verify.sh.j2
+index faaf2d6..66c78ee 100644
+--- a/templates/mc_verify.sh.j2
++++ b/templates/mc_verify.sh.j2
+@@ -7,23 +7,23 @@ echo "probe $STAMP" > /tmp/probe.txt
+ {% for bucket in s3_buckets %}
+ B={{ bucket }}
+ echo "=== $B ==="
+-if mc cp /tmp/probe.txt s3/$B/healthcheck/probe-$STAMP.txt >/dev/null 2>&1; then
++if mc {{ mc_opts }} cp /tmp/probe.txt s3/$B/healthcheck/probe-$STAMP.txt >/dev/null 2>&1; then
+   echo "  PUT    ok"
+-  if mc stat s3/$B/healthcheck/probe-$STAMP.txt >/dev/null 2>&1; then
++  if mc {{ mc_opts }} stat s3/$B/healthcheck/probe-$STAMP.txt >/dev/null 2>&1; then
+     echo "  STAT   ok"; else echo "  STAT   FAIL"; FAIL=1; fi
+-  OUT=$(mc cat s3/$B/healthcheck/probe-$STAMP.txt 2>/dev/null)
++  OUT=$(mc {{ mc_opts }} cat s3/$B/healthcheck/probe-$STAMP.txt 2>/dev/null)
+   case "$OUT" in
+     "probe $STAMP") echo "  GET    ok (content matches)";;
+     *)              echo "  GET    FAIL (got: $OUT)"; FAIL=1;;
+   esac
+-  if mc rm s3/$B/healthcheck/probe-$STAMP.txt >/dev/null 2>&1; then
++  if mc {{ mc_opts }} rm s3/$B/healthcheck/probe-$STAMP.txt >/dev/null 2>&1; then
+     echo "  DELETE ok"; else echo "  DELETE FAIL"; FAIL=1; fi
+ else
+   echo "  PUT    FAIL"; FAIL=1
+ fi
+ {% endfor %}
+ echo; echo "=== scope check (write outside the contract buckets should be denied) ==="
+-if mc cp /tmp/probe.txt s3/not-allowed-$STAMP/x.txt >/dev/null 2>&1; then
++if mc {{ mc_opts }} cp /tmp/probe.txt s3/not-allowed-$STAMP/x.txt >/dev/null 2>&1; then
+   echo "  WARN: key is NOT scoped — wrote outside!"; FAIL=1
+ else
+   echo "  ok: blocked outside {{ s3_buckets | join('/') }}"
+diff --git a/vars/storage_aistor.yml b/vars/storage_aistor.yml
+index 52333c1..ff59887 100644
+--- a/vars/storage_aistor.yml
++++ b/vars/storage_aistor.yml
+@@ -9,7 +9,7 @@ s3_namespace: primary-object-store
+ # DNS uses s3_service_name; `kubectl get objectstore` uses
+ # aistor_objectstore_name (role default).
+ s3_service_name: minio
+-s3_scheme: http
++s3_scheme: "{{ aistor_s3_scheme }}"
+ s3_port: 9000
+ s3_nodeport: 31001
+ s3_host: "{{ s3_service_name }}.{{ s3_namespace }}.svc.cluster.local"
+diff --git a/vars/storage_seaweedfs.yml b/vars/storage_seaweedfs.yml
+index dc7b408..bf52a5d 100644
+--- a/vars/storage_seaweedfs.yml
++++ b/vars/storage_seaweedfs.yml
+@@ -7,7 +7,7 @@ s3_namespace: seaweedfs
+ # fullnameOverride to "seaweedfs", so this is deterministic across chart
+ # versions instead of being derived from the release name.
+ s3_service_name: seaweedfs-s3
+-s3_scheme: http
++s3_scheme: "{{ seaweedfs_s3_scheme }}"
+ s3_port: 8333                    # SeaweedFS S3 gateway (NOT 9000)
+ s3_nodeport: 31101
+ s3_host: "{{ s3_service_name }}.{{ s3_namespace }}.svc.cluster.local"
+-- 
+2.43.0
+
