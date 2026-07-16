@@ -2,7 +2,6 @@
 group_vars/all/secrets.yml
 inventory/hosts.yml
 .vault_pass
-inventory/hosts-ssm.yml
 
 # Fetched from the node at runtime
 .kubeconfig/
