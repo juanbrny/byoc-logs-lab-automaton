@@ -16,6 +16,10 @@ REPO_VARS = yaml.safe_load(open("group_vars/all/main.yml"))
 BACKENDS = [p.split("storage_")[1][:-4] for p in glob.glob("vars/storage_*.yml")]
 
 BASE = dict(
+    # group_vars derives several values from inventory structure; stub it.
+    groups={"lab_node": ["ci-node"], "k8s_control": ["localhost"]},
+    k8s_control_on_node=False,
+    kubeconfig_path=".kubeconfig/k3s-byoc.yaml",
     node_ip="10.0.0.10",
     lab_node_name="ci-node",
     playbook_dir=".",

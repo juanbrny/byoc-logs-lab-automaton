@@ -24,13 +24,17 @@
           tags: [distro]
       tags: [distro]
 
+# Runs on whichever host the inventory puts in k8s_control:
+#   localhost  -> workstation drives the cluster over the network (SSH labs)
+#   the node   -> everything executes on the instance (AWS/SSM, no inbound)
+# kubeconfig, privilege and tooling all follow from that one choice.
 - name: Deploy the BYOC Logs prerequisite stack + BYOC Logs
-  hosts: localhost
-  connection: local
+  hosts: k8s_control
   gather_facts: true
+  become: "{{ k8s_control_on_node }}"
   environment:
-    KUBECONFIG: "{{ kubeconfig_local_path }}"
-    K8S_AUTH_KUBECONFIG: "{{ kubeconfig_local_path }}"
+    KUBECONFIG: "{{ kubeconfig_path }}"
+    K8S_AUTH_KUBECONFIG: "{{ kubeconfig_path }}"
   pre_tasks:
     - name: Load the storage backend contract (endpoint, namespace, quirks)
       ansible.builtin.include_vars: "vars/storage_{{ s3_backend }}.yml"
@@ -63,6 +67,18 @@
           cp inventory/hosts.yml.example inventory/hosts.yml
       tags: [always]
 
+    - name: Assert the inventory defines exactly one k8s_control host
+      ansible.builtin.assert:
+        that:
+          - groups['k8s_control'] | default([]) | length == 1
+        fail_msg: >-
+          inventory/hosts.yml must define exactly one host under k8s_control —
+          either 'localhost' (workstation drives the cluster; needs network
+          access to the API server) or the same host as lab_node (everything
+          runs on the node; required for AWS/SSM). See
+          inventory/hosts-ssm.yml.example.
+      tags: [always]
+
     - name: Refuse to run with placeholder secrets
       ansible.builtin.assert:
         that:
@@ -76,6 +92,14 @@
           ansible-vault edit group_vars/all/secrets.yml
       tags: [always]
   tasks:
+    - name: Install kubectl/helm/python tooling on the node
+      when: k8s_control_on_node
+      ansible.builtin.include_role:
+        name: k8s_tooling
+        apply:
+          tags: [tooling]
+      tags: [tooling]
+
     - name: Datadog operator + agent
       ansible.builtin.include_role:
         name: datadog_agent

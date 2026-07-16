@@ -39,12 +39,16 @@
     /usr/local/bin/k3s kubectl wait --for=condition=Ready node --all --timeout=180s
   changed_when: false
 
+# Only needed when the workstation drives the cluster. With SSM, k8s_control is
+# the node itself and it reads /etc/rancher/k3s/k3s.yaml directly.
 - name: Read kubeconfig from the node
+  when: not (k8s_control_on_node | bool)
   ansible.builtin.slurp:
     src: /etc/rancher/k3s/k3s.yaml
   register: k3s_kubeconfig
 
 - name: Ensure local kubeconfig dir exists
+  when: not (k8s_control_on_node | bool)
   ansible.builtin.file:
     path: "{{ kubeconfig_local_path | dirname }}"
     state: directory
@@ -53,6 +57,7 @@
   become: false
 
 - name: Write kubeconfig locally, pointing at the node IP
+  when: not (k8s_control_on_node | bool)
   ansible.builtin.copy:
     content: "{{ k3s_kubeconfig.content | b64decode | replace('127.0.0.1', node_ip) }}"
     dest: "{{ kubeconfig_local_path }}"

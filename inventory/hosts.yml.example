@@ -1,11 +1,15 @@
 ---
-# TEMPLATE — copy to inventory/hosts.yml and set your node's address:
-#
+# TEMPLATE — copy to inventory/hosts.yml:
 #   cp inventory/hosts.yml.example inventory/hosts.yml
 #
-# The real hosts.yml is gitignored. This is the SINGLE SOURCE OF TRUTH for the
-# node address: group_vars derives node_ip from it, so there is no second place
-# to keep in sync. The lab_node group must contain exactly one host.
+# SSH variant: the workstation reaches the node over SSH *and* reaches the
+# cluster API over the network. For AWS/SSM (no SSH, no inbound), start from
+# inventory/hosts-ssm.yml.example instead.
+#
+# Two groups, and both matter:
+#   lab_node    — the machine k3s is installed on.
+#   k8s_control — where kubectl/helm/kubernetes.core RUN. Here: the
+#                 workstation, which needs network access to the API server.
 all:
   children:
     lab_node:
@@ -15,3 +19,8 @@ all:
         byoc-lab-node:
           ansible_host: 10.0.0.10
           ansible_user: root
+
+    k8s_control:
+      hosts:
+        localhost:
+          ansible_connection: local

@@ -266,6 +266,58 @@ roles/
   Cloud Plugin before CNPG 1.30 if this outlives a few upgrades.
 
 
+## AWS / SSM (no SSH)
+
+Where corporate policy disables SSH to instances, the `community.aws.aws_ssm`
+connection plugin covers the node play — but **the plugin alone is not enough**.
+
+The second play (`helm`, `kubernetes.core`, the `mc` probe pods, the test-log
+POST) originally ran on your workstation and reached the cluster over the
+network: `:6443` for the API server, `:80` for the ingress. In an environment
+locked down enough to disable SSH, those inbound paths are closed too. So the
+repo makes **where the Kubernetes work executes** an inventory decision:
+
+```yaml
+k8s_control:
+  hosts:
+    localhost:            # workstation drives the cluster (needs :6443 reachable)
+      ansible_connection: local
+```
+
+```yaml
+k8s_control:
+  hosts:
+    i-0123456789abcdef0:  # the node drives itself — nothing inbound required
+      ansible_connection: community.aws.aws_ssm
+      ...
+```
+
+Everything else follows from that one line: `become`, the kubeconfig path
+(`/etc/rancher/k3s/k3s.yaml` on the node vs the exported copy on the
+workstation), whether the kubeconfig is exported at all, and whether the
+`k8s_tooling` role installs helm + the python kubernetes client on the instance.
+
+```bash
+cp inventory/hosts-ssm.yml.example inventory/hosts.yml
+```
+
+**Control node:** `pip install boto3`, AWS CLI v2, `session-manager-plugin`,
+`ansible-galaxy collection install -r requirements.yml`.
+
+**Instance:** SSM Agent (baked into AL2023/Ubuntu AMIs), an instance profile
+with `AmazonSSMManagedInstanceCore`, egress to the SSM endpoints (or VPC
+endpoints for `ssm`/`ssmmessages`/`ec2messages`), and egress for k3s/helm/image
+pulls. The `aws_ssm` plugin ships files through an **S3 bucket** —
+`ansible_aws_ssm_bucket_name` is mandatory, and the instance profile needs
+read/write on it.
+
+Note `node_ip` now prefers the address the node reports about itself
+(`ansible_default_ipv4`), because an SSM inventory has no `ansible_host` — the
+inventory name is an instance ID.
+
+Not yet handled: EBS/instance-store layout (`preflight_disk_path` defaults to
+`/`), and security groups are assumed to allow intra-cluster traffic.
+
 ## CI
 
 `.github/workflows/ci.yml` runs on every push:
