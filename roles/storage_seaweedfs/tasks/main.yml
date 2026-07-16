@@ -14,6 +14,7 @@
   kubernetes.core.helm_repository:
     name: seaweedfs
     repo_url: "{{ seaweedfs_helm_repo }}"
+    force_update: true
 
 - name: Create storage namespace
   kubernetes.core.k8s:

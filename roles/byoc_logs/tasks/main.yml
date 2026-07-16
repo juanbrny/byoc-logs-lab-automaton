@@ -68,6 +68,7 @@
   kubernetes.core.helm_repository:
     name: datadog
     repo_url: https://helm.datadoghq.com
+    force_update: true
 
 - name: Install BYOC Logs (CloudPrem) chart
   kubernetes.core.helm:

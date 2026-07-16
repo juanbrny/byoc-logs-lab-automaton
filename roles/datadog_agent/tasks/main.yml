@@ -3,6 +3,7 @@
   kubernetes.core.helm_repository:
     name: datadog
     repo_url: "{{ datadog_helm_repo }}"
+    force_update: true
 
 - name: Install Datadog operator
   kubernetes.core.helm:
