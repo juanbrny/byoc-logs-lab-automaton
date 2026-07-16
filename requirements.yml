@@ -2,12 +2,6 @@
 collections:
   - name: kubernetes.core
     version: ">=3.0.0"
-  # Only needed for the AWS/SSM inventory (community.aws.aws_ssm connection).
-  - name: community.aws
-  - name: amazon.aws
 # Python deps on the control node (workstation):
 #   pip install kubernetes
-#   pip install boto3                 # AWS/SSM inventory only
-#
-# Binaries for the AWS/SSM inventory: aws CLI v2 + session-manager-plugin.
 # Binaries on the control node: kubectl, helm
