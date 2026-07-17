@@ -20,3 +20,7 @@ objectStore:
     minio:
       serviceType: NodePort
       nodePort: {{ s3_nodeport }}
+secrets:
+  name: {{ aistor_release_name }}-creds
+  accessKey: "{{ aistor_root_user }}"
+  secretKey: "{{ aistor_root_password }}"
