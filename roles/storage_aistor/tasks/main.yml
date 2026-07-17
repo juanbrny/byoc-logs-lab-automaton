@@ -8,7 +8,8 @@
 - name: Install AIStor operators (adminjob + object-store)
   kubernetes.core.helm:
     name: aistor
-    chart_ref: minio/aistor-operator
+    chart_ref: "{{ charts.aistor_operator.chart }}"
+    chart_version: "{{ charts.aistor_operator.version }}"
     release_namespace: "{{ aistor_operator_namespace }}"
     create_namespace: true
     update_repo_cache: true
@@ -20,7 +21,8 @@
 - name: Deploy object store tenant (single node, single drive, no TLS)
   kubernetes.core.helm:
     name: "{{ aistor_release_name }}"
-    chart_ref: minio/aistor-objectstore
+    chart_ref: "{{ charts.aistor_objectstore.chart }}"
+    chart_version: "{{ charts.aistor_objectstore.version }}"
     release_namespace: "{{ s3_namespace }}"
     create_namespace: true
     values: "{{ lookup('template', 'objectstore-values.yaml.j2') | from_yaml }}"
@@ -58,7 +60,7 @@
   ansible.builtin.command:
     cmd: >
       kubectl run mc-verify --rm -i --restart=Never
-      -n {{ s3_namespace }} --image=quay.io/minio/mc:latest
+      -n {{ s3_namespace }} --image={{ mc_image }}
       --env=MC_HOST_s3={{ mc_app_url }}
       --command -- sh -s
     stdin: "{{ lookup('template', playbook_dir + '/templates/mc_verify.sh.j2') }}"
@@ -78,7 +80,7 @@
       ansible.builtin.command:
         cmd: >
           kubectl run mc-mkbucket --rm -i --restart=Never
-          -n {{ s3_namespace }} --image=quay.io/minio/mc:latest
+          -n {{ s3_namespace }} --image={{ mc_image }}
           --env=MC_HOST_adm={{ mc_root_url }}
           --command -- sh -s
         stdin: "{{ lookup('template', playbook_dir + '/templates/mc_make_buckets.sh.j2') }}"
@@ -97,7 +99,7 @@
       ansible.builtin.command:
         cmd: >
           kubectl run mc-accesskey --rm -i --restart=Never
-          -n {{ s3_namespace }} --image=quay.io/minio/mc:latest
+          -n {{ s3_namespace }} --image={{ mc_image }}
           --env=MC_HOST_adm={{ mc_root_url }}
           --command -- sh -s
         stdin: "{{ lookup('template', 'mc_accesskey.sh.j2') }}"
@@ -110,7 +112,7 @@
       ansible.builtin.command:
         cmd: >
           kubectl run mc-verify --rm -i --restart=Never
-          -n {{ s3_namespace }} --image=quay.io/minio/mc:latest
+          -n {{ s3_namespace }} --image={{ mc_image }}
           --env=MC_HOST_s3={{ mc_app_url }}
           --command -- sh -s
         stdin: "{{ lookup('template', playbook_dir + '/templates/mc_verify.sh.j2') }}"

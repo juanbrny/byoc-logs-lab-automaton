@@ -39,3 +39,21 @@
               Resize it, or bypass with -e preflight_skip=true (pods will sit
               Pending if the requests don't fit).
             success_msg: "VM meets spec."
+
+# Every external version must be explicitly pinned. Fail on any CONFIRM_ME
+# placeholder or floating tag so the "stable base" can't silently drift.
+- name: Assert all component versions are pinned
+  vars:
+    _chart_versions: "{{ charts.values() | map(attribute='version') | list }}"
+  ansible.builtin.assert:
+    that:
+      - "'CONFIRM_ME' not in _chart_versions"
+      - k3s_version is defined and k3s_version | length > 0
+      - "':latest' not in mc_image"
+      - mc_image is defined and mc_image | length > 0
+    fail_msg: >-
+      Unpinned or unconfirmed versions in group_vars/all/versions.yml.
+      Fill every CONFIRM_ME (helm list -A) and make sure mc_image is a fixed
+      RELEASE tag, not :latest.
+    success_msg: "All component versions are pinned."
+  tags: [always]

@@ -27,7 +27,7 @@
   block:
     - name: Download helm
       ansible.builtin.get_url:
-        url: "https://get.helm.sh/helm-{{ k8s_tooling_helm_version }}-linux-amd64.tar.gz"
+        url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
         dest: /tmp/helm.tar.gz
         mode: "0640"
 

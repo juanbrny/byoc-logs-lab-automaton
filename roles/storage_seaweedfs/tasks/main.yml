@@ -42,8 +42,8 @@
 - name: Deploy SeaweedFS (master + volume + filer + s3 gateway)
   kubernetes.core.helm:
     name: "{{ seaweedfs_release_name }}"
-    chart_ref: seaweedfs/seaweedfs
-    chart_version: "{{ seaweedfs_chart_version }}"
+    chart_ref: "{{ charts.seaweedfs.chart }}"
+    chart_version: "{{ charts.seaweedfs.version }}"
     release_namespace: "{{ s3_namespace }}"
     update_repo_cache: true
     values: "{{ lookup('template', 'seaweedfs-values.yaml.j2') | from_yaml }}"
@@ -84,7 +84,7 @@
   ansible.builtin.command:
     cmd: >
       kubectl run mc-verify --rm -i --restart=Never
-      -n {{ s3_namespace }} --image=quay.io/minio/mc:latest
+      -n {{ s3_namespace }} --image={{ mc_image }}
       --env=MC_HOST_s3={{ mc_app_url }}
       --command -- sh -s
     stdin: "{{ lookup('template', playbook_dir + '/templates/mc_verify.sh.j2') }}"
@@ -105,7 +105,7 @@
       ansible.builtin.command:
         cmd: >
           kubectl run mc-mkbucket --rm -i --restart=Never
-          -n {{ s3_namespace }} --image=quay.io/minio/mc:latest
+          -n {{ s3_namespace }} --image={{ mc_image }}
           --env=MC_HOST_adm={{ adm_url }}
           --command -- sh -s
         stdin: "{{ lookup('template', playbook_dir + '/templates/mc_make_buckets.sh.j2') }}"
@@ -121,7 +121,7 @@
       ansible.builtin.command:
         cmd: >
           kubectl run mc-verify --rm -i --restart=Never
-          -n {{ s3_namespace }} --image=quay.io/minio/mc:latest
+          -n {{ s3_namespace }} --image={{ mc_image }}
           --env=MC_HOST_s3={{ mc_app_url }}
           --command -- sh -s
         stdin: "{{ lookup('template', playbook_dir + '/templates/mc_verify.sh.j2') }}"

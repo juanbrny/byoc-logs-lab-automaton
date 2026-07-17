@@ -73,7 +73,8 @@
 - name: Install BYOC Logs (CloudPrem) chart
   kubernetes.core.helm:
     name: "{{ byoc_release_name }}"
-    chart_ref: datadog/cloudprem
+    chart_ref: "{{ charts.cloudprem.chart }}"
+    chart_version: "{{ charts.cloudprem.version }}"
     release_namespace: "{{ byoc_namespace }}"
     update_repo_cache: true
     values: "{{ lookup('template', 'datadog-values.yaml.j2') | from_yaml }}"

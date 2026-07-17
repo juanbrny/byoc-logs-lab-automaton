@@ -8,7 +8,8 @@
 - name: Install Datadog operator
   kubernetes.core.helm:
     name: datadog-operator
-    chart_ref: datadog/datadog-operator
+    chart_ref: "{{ charts.datadog_operator.chart }}"
+    chart_version: "{{ charts.datadog_operator.version }}"
     release_namespace: "{{ datadog_namespace }}"
     create_namespace: true
     update_repo_cache: true

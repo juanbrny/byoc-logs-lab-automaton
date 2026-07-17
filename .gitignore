@@ -3,7 +3,6 @@ group_vars/all/secrets.yml
 inventory/hosts.yml
 .vault_pass
 
-#local_data_backup > folder where I keep my local configs to not be overwritten if the new tar replaces folder
 local_data_backup/
 
 # Fetched from the node at runtime
