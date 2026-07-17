@@ -1,0 +1,41 @@
+---
+# =====================================================================
+# SINGLE SOURCE OF TRUTH FOR EVERY EXTERNAL VERSION.
+# Nothing else in this repo may use ":latest" or an unpinned chart.
+# Pinned to the versions that produced a known-good deploy on 2026-07-17
+# (helm list -A + kubectl image inventory). Preflight fails on any :latest
+# or CONFIRM_ME so the base can't drift silently. Upgrade one line at a time.
+# =====================================================================
+
+k3s_version: "v1.35.6+k3s1"
+helm_version: "v3.16.3"                  # SSM path only; unused on SSH
+
+mc_image: "quay.io/minio/mc:RELEASE.2025-05-21T01-59-54Z"
+
+charts:
+  aistor_operator:
+    repo_name: minio
+    repo_url: https://helm.min.io/
+    chart: minio/aistor-operator
+    version: "5.9.0"
+  aistor_objectstore:
+    chart: minio/aistor-objectstore
+    version: "1.0.16"
+  seaweedfs:
+    repo_name: seaweedfs
+    repo_url: https://seaweedfs.github.io/seaweedfs/helm
+    chart: seaweedfs/seaweedfs
+    version: "4.39.0"
+  cnpg:
+    repo_name: cnpg
+    repo_url: https://cloudnative-pg.github.io/charts
+    chart: cnpg/cloudnative-pg
+    version: "0.29.0"
+  datadog_operator:
+    repo_name: datadog
+    repo_url: https://helm.datadoghq.com
+    chart: datadog/datadog-operator
+    version: "2.24.0"
+  cloudprem:
+    chart: datadog/cloudprem
+    version: "0.4.5"
