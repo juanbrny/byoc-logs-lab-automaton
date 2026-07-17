@@ -87,6 +87,7 @@
       retries: 3
       delay: 10
       until: aistor_buckets is succeeded
+      timeout: 120          # hard ceiling — fail instead of hanging forever
 
     # Backend-specific: MinIO/AIStor creates scoped keys after the fact via
     # `mc admin accesskey` (SeaweedFS declares them at deploy time instead).
