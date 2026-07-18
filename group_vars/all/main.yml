@@ -8,10 +8,27 @@ k8s_distro: k3s            # future: rke2, kubeadm, ...
 s3_backend: aistor         # aistor | seaweedfs | external
 
 # Derived from the inventory — do NOT hardcode. The lab_node group must hold
-# exactly one host (asserted in site.yml); ansible_host is its address, with
-# the inventory name as fallback if the name itself is resolvable.
+# exactly one host (asserted in site.yml).
 lab_node_name: "{{ groups['lab_node'][0] }}"
-node_ip: "{{ hostvars[lab_node_name].ansible_host | default(lab_node_name) }}"
+
+# Node address. Prefer the IP the node reports about itself (facts gathered in
+# play 1); fall back to ansible_host, then the inventory name. With SSM there is
+# no ansible_host (inventory name is an instance id), hence the self-report.
+node_ip: >-
+  {{ hostvars[lab_node_name].ansible_default_ipv4.address
+     | default(hostvars[lab_node_name].ansible_host)
+     | default(lab_node_name) }}
+
+# Does the Kubernetes work run ON the node, or on the workstation?
+# True unless k8s_control is explicitly localhost. Default = on the node, which
+# is what you want for any lab reached over a public IP or SSM: no inbound 6443,
+# deps live on the node, no split-brain about which cluster you are hitting.
+k8s_control_on_node: "{{ 'localhost' not in (groups['k8s_control'] | default(['__none__'])) }}"
+
+# kubeconfig from the perspective of whoever runs kubectl/helm.
+kubeconfig_path: >-
+  {{ '/etc/rancher/k3s/k3s.yaml' if (k8s_control_on_node | bool)
+     else kubeconfig_local_path }}
 
 # --- k8s distro contract (defaults for k3s; a different distro role ---
 # --- may need different values here)                                 ---

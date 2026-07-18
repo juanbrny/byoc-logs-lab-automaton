@@ -2,11 +2,13 @@
 # The kubernetes.core modules execute on whichever host runs the task, so when
 # that host is the node it needs helm, the python kubernetes client, and (for
 # the mc probes) kubectl. k3s ships kubectl, so we just expose it on PATH.
-- name: Ensure python3 + pip are present
+- name: Ensure base tooling is present (python, pip, tar for unarchive)
   ansible.builtin.package:
     name:
       - python3
       - python3-pip
+      - tar
+      - gzip
     state: present
 
 - name: Install the python kubernetes client (needed by kubernetes.core)
@@ -44,10 +46,21 @@
         mode: "0755"
         remote_src: true
 
-# k3s installs its own kubectl but does not always symlink it.
+    # sudo's secure_path often omits /usr/local/bin, so the helm modules (run
+    # under become) can't find it there. Symlink into /usr/bin, which is always
+    # on secure_path.
+    - name: Expose helm on the secure_path
+      ansible.builtin.file:
+        src: /usr/local/bin/helm
+        dest: /usr/bin/helm
+        state: link
+        force: true
+
+# k3s installs its own kubectl but does not always symlink it. Target /usr/bin
+# (on sudo's secure_path) so it's found under become, not /usr/local/bin.
 - name: Expose kubectl on PATH
   ansible.builtin.file:
     src: /usr/local/bin/k3s
-    dest: /usr/local/bin/kubectl
+    dest: /usr/bin/kubectl
     state: link
     force: true

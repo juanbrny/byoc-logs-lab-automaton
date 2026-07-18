@@ -39,10 +39,14 @@
     /usr/local/bin/k3s kubectl wait --for=condition=Ready node --all --timeout=180s
   changed_when: false
 
+# The kubeconfig export below is only needed when the WORKSTATION drives the
+# cluster (LAN model). When k8s work runs on the node (default), play 2 reads
+# /etc/rancher/k3s/k3s.yaml directly, so all three tasks are skipped.
 - name: Read kubeconfig from the node
   ansible.builtin.slurp:
     src: /etc/rancher/k3s/k3s.yaml
   register: k3s_kubeconfig
+  when: not (k8s_control_on_node | bool)
 
 - name: Ensure local kubeconfig dir exists
   ansible.builtin.file:
@@ -51,6 +55,7 @@
     mode: "0700"
   delegate_to: localhost
   become: false
+  when: not (k8s_control_on_node | bool)
 
 - name: Write kubeconfig locally, pointing at the node IP
   ansible.builtin.copy:
@@ -59,3 +64,4 @@
     mode: "0600"
   delegate_to: localhost
   become: false
+  when: not (k8s_control_on_node | bool)

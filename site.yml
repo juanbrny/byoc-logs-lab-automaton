@@ -24,13 +24,20 @@
           tags: [distro]
       tags: [distro]
 
+# Runs on whichever host the inventory puts in k8s_control:
+#   the node    -> everything executes on the instance (default; SSH or SSM,
+#                  no inbound 6443 needed)
+#   localhost   -> workstation drives the cluster over the network (LAN only)
 - name: Deploy the BYOC Logs prerequisite stack + BYOC Logs
-  hosts: localhost
-  connection: local
+  hosts: k8s_control
   gather_facts: true
+  # become is needed to read /etc/rancher/k3s/k3s.yaml and run helm/kubectl as a
+  # non-root sudo user (ec2-user etc). Harmless no-op when on-node is false or
+  # the user is already root.
+  become: "{{ k8s_control_on_node }}"
   environment:
-    KUBECONFIG: "{{ kubeconfig_local_path }}"
-    K8S_AUTH_KUBECONFIG: "{{ kubeconfig_local_path }}"
+    KUBECONFIG: "{{ kubeconfig_path }}"
+    K8S_AUTH_KUBECONFIG: "{{ kubeconfig_path }}"
   pre_tasks:
     - name: Load the storage backend contract (endpoint, namespace, quirks)
       ansible.builtin.include_vars: "vars/storage_{{ s3_backend }}.yml"
@@ -40,6 +47,8 @@
       ansible.builtin.stat:
         path: "{{ playbook_dir }}/group_vars/all/secrets.yml"
       register: secrets_file
+      delegate_to: localhost
+      become: false
       tags: [always]
 
     - name: Explain how to create it if missing
@@ -63,6 +72,18 @@
           cp inventory/hosts.yml.example inventory/hosts.yml
       tags: [always]
 
+    - name: Assert the inventory defines exactly one k8s_control host
+      ansible.builtin.assert:
+        that:
+          - groups['k8s_control'] | default([]) | length == 1
+        fail_msg: >-
+          inventory must define exactly one host under k8s_control. For a
+          self-contained lab (recommended) point it at the SAME host as
+          lab_node — the k8s work then runs on the node over SSH, needing only
+          port 22. Use 'localhost' only on a LAN where your workstation can
+          reach the API server on :6443.
+      tags: [always]
+
     - name: Refuse to run with placeholder secrets
       ansible.builtin.assert:
         that:
@@ -76,6 +97,14 @@
           ansible-vault edit group_vars/all/secrets.yml
       tags: [always]
   tasks:
+    - name: Install kubectl/helm/python tooling on the node
+      when: k8s_control_on_node | bool
+      ansible.builtin.include_role:
+        name: k8s_tooling
+        apply:
+          tags: [tooling]
+      tags: [tooling]
+
     - name: Datadog operator + agent
       ansible.builtin.include_role:
         name: datadog_agent
